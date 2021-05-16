@@ -92,6 +92,7 @@ typedef struct app_state
     piece current_piece;
     b32 game_over; 
     int line_count;
+    int time_since_last_drop;
 } app_state;
 
 #endif

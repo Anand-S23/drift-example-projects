@@ -4,7 +4,9 @@
 #include <math.h>
 #include <time.h>
 
-#include "drift_renderer.c"
+#include <drift.h>
+#include <drift_renderer.c>
+
 #include "tetris.h"
 
 global app_state *state;
@@ -131,7 +133,7 @@ internal b32 SoftDropPiece(app_state *game_state)
     return 1;
 }
 
-internal void InitApp()
+INIT_APP(Init)
 {
     Assert(sizeof(app_state) <= platform->storage_size);
     state = (app_state *)platform->storage;
@@ -145,10 +147,11 @@ internal void InitApp()
     platform->initialized = 1;
 }
 
-internal void UpdateApp()
+UPDATE_APP(Update)
 {
     // Update
     state->delta_t = platform->current_time - platform->last_time;
+    state->time_since_last_drop += (state->delta_t);
 
     piece test_piece = state->current_piece;
     
@@ -162,7 +165,7 @@ internal void UpdateApp()
         ++test_piece.col_offset;
     }
 
-    if (platform->key_down[KEY_up])
+    if (platform->key_release[KEY_up])
     {
         test_piece.rotation = (test_piece.rotation + 1) % 4;
     }
@@ -179,14 +182,15 @@ internal void UpdateApp()
     }
 
     // Hard Drop 
-    if (platform->key_down[KEY_space])
+    if (platform->key_release[KEY_space])
     {
         while(SoftDropPiece(state));
     }
     
-    if (state->delta_t >= 1000)
+    if (state->time_since_last_drop >= 450)
     {
         SoftDropPiece(state);
+        state->time_since_last_drop = 0;
     }
 
     // Render
@@ -240,18 +244,19 @@ internal void UpdateApp()
     platform->SwapBuffers();
 }
 
-internal drift_application DriftMain()
+DRIFT_MAIN(DriftMain)
 {
     drift_application app = {0};
     {
         app.name = "Tetris";
         app.window_width = 316;
         app.window_height = 700;
-
-        app.Init = InitApp;
-        app.Update = UpdateApp;
+        // app.window_exact = 1;
+        app.window_style = (DWS_overlapped | DWS_caption | DWS_sysmenu |
+                            DWS_minimizebox | DWS_maximizebox);
     }
 
+    platform = platform_;
     return app;
 }
 
