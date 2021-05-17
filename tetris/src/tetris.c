@@ -133,6 +133,56 @@ internal b32 SoftDropPiece(app_state *game_state)
     return 1;
 }
 
+internal v4 GetColor(int val)
+{
+    v4 color;
+
+    switch (val)
+    {
+        case 1:
+        {
+            color = v4(0, 1, 1, 1);
+        } break;
+
+        case 2:
+        {
+            color = v4(1, 1, 0, 1);
+        } break;
+
+        case 3:
+        {
+            color = v4(0.5f, 0, 0.5f, 1);
+        } break;
+
+        case 4:
+        {
+            color = v4(0, 0, 1, 1); 
+        } break;
+
+        case 5:
+        {
+            color = v4(1, 0.59f, 0.11f, 1);
+        } break;
+
+        case 6:
+        {
+            color = v4(0, 1, 0, 1);
+        } break;
+
+        case 7:
+        {
+            color = v4(1, 0, 0, 1);
+        } break;
+
+        default:
+        {
+            color = v4(0, 0, 0, 0);
+        } break;
+    }
+
+    return color;
+}
+
 INIT_APP(Init)
 {
     Assert(sizeof(app_state) <= platform->storage_size);
@@ -153,16 +203,23 @@ UPDATE_APP(Update)
     state->delta_t = platform->current_time - platform->last_time;
     state->time_since_last_drop += (state->delta_t);
 
+    local_persist u8 count = 0;
+    local_persist b32 left_valid = 1; 
+    local_persist b32 right_valid = 1; 
+
     piece test_piece = state->current_piece;
-    
-    if (platform->key_down[KEY_left])
+
+    // Movement on test piece
+    if (platform->key_down[KEY_left] && left_valid)
     {
         --test_piece.col_offset;
+        left_valid = 0;
     }
 
-    if (platform->key_down[KEY_right])
+    if (platform->key_down[KEY_right] && right_valid)
     {
         ++test_piece.col_offset;
+        right_valid = 0;
     }
 
     if (platform->key_release[KEY_up])
@@ -193,24 +250,79 @@ UPDATE_APP(Update)
         state->time_since_last_drop = 0;
     }
 
+    // Control piece move rate left/right
+    ++count;
+    if (count >= 4)
+    {
+        count = 0;
+        left_valid = 1;
+        right_valid = 1;
+    }
+
     // Render
     ClearScreen(v4(0.2f, 0.3f, 0.3f, 1.0f));
     BeginRenderer(&state->renderer, platform->window_width, platform->window_height);
+
+    // Render Grid
+    for (int i = 0; i <= WIDTH; ++i)
+    {
+        RenderRect(&state->renderer, v2(i * CELL_SIZE, 0),
+                   v2(1, HEIGHT * CELL_SIZE), v4(.5, .5, .5, 1));
+    }
+
+    for (int i = 0; i <= HEIGHT; ++i)
+    {
+        RenderRect(&state->renderer, v2(0, i * CELL_SIZE),
+                   v2(WIDTH * CELL_SIZE, 1), v4(.5, .5, .5, 1));
+    }
 
     int piece_size = tetrominos[state->current_piece.type].size;
 
     int pitch = state->current_piece.row_offset * WIDTH +
         state->current_piece.col_offset;
 
-    // Render current piece
     tetromino *tetro = &tetrominos[state->current_piece.type];
+
+    // Render Copy Piece
+    piece copy_piece = state->current_piece;
+    // copy_piece.row_offset = HEIGHT - tetro->size + 1; 
+
+    while (CheckPieceValid(&copy_piece, state->board, WIDTH, HEIGHT))
+    {
+        ++copy_piece.row_offset;
+    }
+
+    --copy_piece.row_offset;
 
     for (int row = 0; row < tetro->size; ++row)
     {
         for (int col = 0; col < tetro->size; ++col)
         {
             u8 val = GetTetrominoData(tetro, row, col,
+                                      copy_piece.rotation);
+
+            if (val)
+            {
+                int board_row = copy_piece.row_offset + row;
+                int board_col = copy_piece.col_offset + col;
+
+                v2 pos = v2(board_col * CELL_SIZE, board_row * CELL_SIZE);
+                v2 size = v2(CELL_SIZE, CELL_SIZE); 
+
+                v4 color = v4(0.5f, 0.5f, 0.5f, 1);
+                RenderRect(&state->renderer, pos, size, color);
+            }
+        }
+    }
+
+    // Render current piece
+    for (int row = 0; row < tetro->size; ++row)
+    {
+        for (int col = 0; col < tetro->size; ++col)
+        {
+            u8 val = GetTetrominoData(tetro, row, col,
                                       state->current_piece.rotation);
+
 
             if (val)
             {
@@ -220,7 +332,8 @@ UPDATE_APP(Update)
                 v2 pos = v2(board_col * CELL_SIZE, board_row * CELL_SIZE);
                 v2 size = v2(CELL_SIZE, CELL_SIZE); 
 
-                RenderRect(&state->renderer, pos, size, v4(1, 1, 1, 1));
+                v4 color = GetColor(val);
+                RenderRect(&state->renderer, pos, size, color);
             }
         }
     }
@@ -236,9 +349,13 @@ UPDATE_APP(Update)
             v2 pos = v2(col * CELL_SIZE, row * CELL_SIZE);
             v2 size = v2(CELL_SIZE, CELL_SIZE);
 
-            RenderRect(&state->renderer, pos, size, v4(1, 1, 1, 1));
+            v4 color = GetColor(state->board[i]);
+            RenderRect(&state->renderer, pos, size, color);
         }
     } 
+
+    RenderRect(&state->renderer, v2(0, 0), v2(WIDTH * CELL_SIZE, 2 * CELL_SIZE),
+               v4(0.2f, 0.3f, 0.3f, 1.0f));
 
     SubmitRenderer(&state->renderer);
     platform->SwapBuffers();
@@ -249,9 +366,8 @@ DRIFT_MAIN(DriftMain)
     drift_application app = {0};
     {
         app.name = "Tetris";
-        app.window_width = 316;
+        app.window_width = 317;
         app.window_height = 700;
-        // app.window_exact = 1;
         app.window_style = (DWS_overlapped | DWS_caption | DWS_sysmenu |
                             DWS_minimizebox | DWS_maximizebox);
     }
