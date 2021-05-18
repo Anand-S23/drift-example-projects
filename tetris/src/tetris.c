@@ -89,6 +89,20 @@ internal b32 CheckPieceValid(piece *piece, const u8 *board, int width, int heigh
     return 1;
 }
 
+internal b32 GetUniformLine(u8 *board, int row, int val, int width)
+{
+    for (int col = 0; col < width; ++col)
+    {
+        if ((val && !board[row * width + col]) ||
+            (!val && board[row * width + col]))
+        {
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
 internal void MergePieceToBoard(app_state *game_state)
 {
     tetromino *tetro = &tetrominos[game_state->current_piece.type];
@@ -104,6 +118,49 @@ internal void MergePieceToBoard(app_state *game_state)
                 int board_row = game_state->current_piece.row_offset + row;
                 int board_col = game_state->current_piece.col_offset + col;
                 game_state->board[board_row * WIDTH + board_col] = val;
+                state->game_over = (board_row < 2) ? 1 : 0;
+            }
+        }
+    }
+}
+            
+internal void CheckClearLine(u8 *board)
+{
+    b32 cleared_lines[HEIGHT] = {0};
+    int cleared_count = 0;
+
+    for (int row = HEIGHT - 1; row >= 0; --row)
+    {
+        if (GetUniformLine(board, row, 1, WIDTH))
+        {
+            cleared_lines[row] = 1;
+            ++cleared_count;
+        }
+    }
+
+    if (cleared_count)
+    {
+        int next_line = HEIGHT - 1;
+        for (int row = HEIGHT - 1; row >= 0; --row)
+        {
+            while (cleared_lines[next_line] && next_line >= 0)
+            {
+                --next_line;
+            }
+
+            if (next_line < 0)
+            {
+                memset(&board[row * WIDTH], 0, WIDTH);
+            }
+            else
+            {
+                if (row != next_line)
+                {
+                    memcpy(&board[row * WIDTH],
+                           &board[next_line * WIDTH], WIDTH);
+                }
+
+                --next_line;
             }
         }
     }
@@ -111,7 +168,7 @@ internal void MergePieceToBoard(app_state *game_state)
 
 internal void SpawnNewPiece(app_state *game_state)
 {
-    game_state->current_piece.type = TETROMINO_t;
+    game_state->current_piece.type = (tetromino_type)(rand() % 7);
     game_state->current_piece.row_offset = 0;
     game_state->current_piece.col_offset = WIDTH / 2;
     game_state->current_piece.rotation = 0;
@@ -126,6 +183,7 @@ internal b32 SoftDropPiece(app_state *game_state)
     {
         --game_state->current_piece.row_offset;
         MergePieceToBoard(game_state);
+        CheckClearLine(game_state->board);
         SpawnNewPiece(game_state);
         return 0;
     }
@@ -133,51 +191,58 @@ internal b32 SoftDropPiece(app_state *game_state)
     return 1;
 }
 
-internal v4 GetColor(int val)
+internal v4 GetColor(int val, b32 game_over)
 {
     v4 color;
 
-    switch (val)
+    if (game_over)
     {
-        case 1:
+        color = v4(0.5f, 0.5f, 0.5f, 1);
+    }
+    else
+    {
+        switch (val)
         {
-            color = v4(0, 1, 1, 1);
-        } break;
+            case 1:
+            {
+                color = v4(0, 1, 1, 1);
+            } break;
 
-        case 2:
-        {
-            color = v4(1, 1, 0, 1);
-        } break;
+            case 2:
+            {
+                color = v4(1, 1, 0, 1);
+            } break;
 
-        case 3:
-        {
-            color = v4(0.5f, 0, 0.5f, 1);
-        } break;
+            case 3:
+            {
+                color = v4(0.5f, 0, 0.5f, 1);
+            } break;
 
-        case 4:
-        {
-            color = v4(0, 0, 1, 1); 
-        } break;
+            case 4:
+            {
+                color = v4(0, 0, 1, 1); 
+            } break;
 
-        case 5:
-        {
-            color = v4(1, 0.59f, 0.11f, 1);
-        } break;
+            case 5:
+            {
+                color = v4(1, 0.59f, 0.11f, 1);
+            } break;
 
-        case 6:
-        {
-            color = v4(0, 1, 0, 1);
-        } break;
+            case 6:
+            {
+                color = v4(0, 1, 0, 1);
+            } break;
 
-        case 7:
-        {
-            color = v4(1, 0, 0, 1);
-        } break;
+            case 7:
+            {
+                color = v4(1, 0, 0, 1);
+            } break;
 
-        default:
-        {
-            color = v4(0, 0, 0, 0);
-        } break;
+            default:
+            {
+                color = v4(0, 0, 0, 0);
+            } break;
+        }
     }
 
     return color;
@@ -188,9 +253,10 @@ INIT_APP(Init)
     Assert(sizeof(app_state) <= platform->storage_size);
     state = (app_state *)platform->storage;
 
+    srand(time(0));
     InitRenderer(&state->renderer);
 
-    state->current_piece.type = TETROMINO_t;
+    state->current_piece.type = (tetromino_type)(rand() % 7);
     state->current_piece.row_offset = 0;
     state->current_piece.col_offset = WIDTH / 2;
         
@@ -203,60 +269,63 @@ UPDATE_APP(Update)
     state->delta_t = platform->current_time - platform->last_time;
     state->time_since_last_drop += (state->delta_t);
 
-    local_persist u8 count = 0;
-    local_persist b32 left_valid = 1; 
-    local_persist b32 right_valid = 1; 
-
-    piece test_piece = state->current_piece;
-
-    // Movement on test piece
-    if (platform->key_down[KEY_left] && left_valid)
+    if (!state->game_over)
     {
-        --test_piece.col_offset;
-        left_valid = 0;
-    }
+        local_persist u8 count = 0;
+        local_persist b32 left_valid = 1; 
+        local_persist b32 right_valid = 1; 
 
-    if (platform->key_down[KEY_right] && right_valid)
-    {
-        ++test_piece.col_offset;
-        right_valid = 0;
-    }
+        piece test_piece = state->current_piece;
 
-    if (platform->key_release[KEY_up])
-    {
-        test_piece.rotation = (test_piece.rotation + 1) % 4;
-    }
+        // Movement on test piece
+        if (platform->key_down[KEY_left] && left_valid)
+        {
+            --test_piece.col_offset;
+            left_valid = 0;
+        }
 
-    // Check piece valid
-    if (CheckPieceValid(&test_piece, state->board, WIDTH, HEIGHT))
-    {
-        state->current_piece = test_piece;
-    }
+        if (platform->key_down[KEY_right] && right_valid)
+        {
+            ++test_piece.col_offset;
+            right_valid = 0;
+        }
 
-    if (platform->key_down[KEY_down])
-    {
-        SoftDropPiece(state);
-    }
+        if (platform->key_release[KEY_up])
+        {
+            test_piece.rotation = (test_piece.rotation + 1) % 4;
+        }
 
-    // Hard Drop 
-    if (platform->key_release[KEY_space])
-    {
-        while(SoftDropPiece(state));
-    }
-    
-    if (state->time_since_last_drop >= 450)
-    {
-        SoftDropPiece(state);
-        state->time_since_last_drop = 0;
-    }
+        // Check piece valid
+        if (CheckPieceValid(&test_piece, state->board, WIDTH, HEIGHT))
+        {
+            state->current_piece = test_piece;
+        }
 
-    // Control piece move rate left/right
-    ++count;
-    if (count >= 4)
-    {
-        count = 0;
-        left_valid = 1;
-        right_valid = 1;
+        if (platform->key_down[KEY_down])
+        {
+            SoftDropPiece(state);
+        }
+
+        // Hard Drop 
+        if (platform->key_release[KEY_space])
+        {
+            while(SoftDropPiece(state));
+        }
+
+        if (state->time_since_last_drop >= 450)
+        {
+            SoftDropPiece(state);
+            state->time_since_last_drop = 0;
+        }
+
+        // Control piece move rate left/right
+        ++count;
+        if (count >= 4)
+        {
+            count = 0;
+            left_valid = 1;
+            right_valid = 1;
+        }
     }
 
     // Render
@@ -332,7 +401,7 @@ UPDATE_APP(Update)
                 v2 pos = v2(board_col * CELL_SIZE, board_row * CELL_SIZE);
                 v2 size = v2(CELL_SIZE, CELL_SIZE); 
 
-                v4 color = GetColor(val);
+                v4 color = GetColor(val, state->game_over);
                 RenderRect(&state->renderer, pos, size, color);
             }
         }
@@ -349,13 +418,49 @@ UPDATE_APP(Update)
             v2 pos = v2(col * CELL_SIZE, row * CELL_SIZE);
             v2 size = v2(CELL_SIZE, CELL_SIZE);
 
-            v4 color = GetColor(state->board[i]);
+            v4 color = GetColor(state->board[i], state->game_over);
             RenderRect(&state->renderer, pos, size, color);
         }
     } 
 
-    RenderRect(&state->renderer, v2(0, 0), v2(WIDTH * CELL_SIZE, 2 * CELL_SIZE),
+    // Render Banner
+    RenderRect(&state->renderer, v2(1, 0),
+               v2(WIDTH * CELL_SIZE - 1, 2 * CELL_SIZE),
                v4(0.2f, 0.3f, 0.3f, 1.0f));
+
+    // T
+    RenderRect(&state->renderer, v2(10, 5), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(27, 5), v2(5, 50), v4(1, 1, 1, 1));
+
+    // E
+    RenderRect(&state->renderer, v2(58, 5), v2(5, 50), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(58, 5), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(58, 28), v2(32, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(58, 50), v2(38, 5), v4(1, 1, 1, 1));
+                                                                            
+    // T
+    RenderRect(&state->renderer, v2(106, 5), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(123, 5), v2(5, 50), v4(1, 1, 1, 1));
+
+    // R
+    RenderRect(&state->renderer, v2(154, 5), v2(5, 50), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(154, 5), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(154, 28), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(187, 5), v2(5, 28), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(182, 28), v2(5, 12), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(187, 38), v2(5, 18), v4(1, 1, 1, 1));
+
+    // I
+    RenderRect(&state->renderer, v2(219, 5), v2(5, 50), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(202, 5), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(202, 50), v2(38, 5), v4(1, 1, 1, 1));
+
+    // S
+    RenderRect(&state->renderer, v2(250, 5), v2(5, 25), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(250, 5), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(250, 28), v2(38, 5), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(283, 28), v2(5, 25), v4(1, 1, 1, 1));
+    RenderRect(&state->renderer, v2(250, 50), v2(38, 5), v4(1, 1, 1, 1));
 
     SubmitRenderer(&state->renderer);
     platform->SwapBuffers();
