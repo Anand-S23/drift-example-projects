@@ -1,18 +1,18 @@
 #ifndef APP_H
 #define APP_H
 
-#define PLAYER_ACC 0.1f
-#define PLAYER_FRICTION 0.1f
-#define GRAVITY 0.5f
-
 typedef struct entity
 {
     v2 pos;
     v2 vel;
     v2 acc;
     v2 dimension;
+    f32 max_speed;
+    f32 friction;
+    f32 jump_speed;
+    b32 is_grounded;
+    b32 is_jumping;
     texture entity_texture;
-    b32 grounded;
     b32 initialized;
 } entity;
 

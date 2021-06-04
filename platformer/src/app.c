@@ -20,41 +20,75 @@ INIT_APP
 
 UPDATE_APP
 {
-    state->delta_t = platform->current_time - platform->last_time;
+    state->delta_t = (platform->current_time - platform->last_time) / 100.f;
 
     local_persist entity player = {0};
     if (!player.initialized)
     {
         player.dimension = v2(32, 64);
+        player.acc = v2(0.25f, 0.75f);
+        player.max_speed = 10.f;
+        player.jump_speed = 5.f;
+        player.friction = 1.f;
         player.initialized = 1;
     }
 
     // Update
+
+    // Player movement left and right
     if (platform->keys[KEY_right].down)
     {
-        player.acc.x = PLAYER_ACC;
+        player.vel.x += (player.max_speed * player.acc.x * state->delta_t);
+        player.vel.x = Min(player.vel.x, player.max_speed);
     }
     else if (platform->keys[KEY_left].down)
     {
-        player.acc.x = -PLAYER_ACC;
+        player.vel.x -= (player.max_speed * player.acc.x * state->delta_t);
+        player.vel.x = Max(player.vel.x, -player.max_speed);
     }
     else
     {
-        player.acc.x = 0;
+        // Slow to a stop with friction
+        if (player.vel.x > 0)
+        {
+            player.vel.x -= (player.friction * player.max_speed * state->delta_t);
+            if (player.vel.x < 0)
+            {
+                player.vel.x = 0;
+            }
+        }
+        else if (player.vel.x < 0)
+        {
+            player.vel.x += (player.friction * player.max_speed * state->delta_t);
+            if (player.vel.x > 0)
+            {
+                player.vel.x = 0;
+            }
+        }
     }
 
-    if (!player.grounded)
+    // Player jump
+    if (player.is_grounded && platform->keys[KEY_up].down)
     {
-        player.acc.y = GRAVITY;
+        player.is_jumping = 1;
+        player.is_grounded = 0;
+        player.vel.y = -player.jump_speed;
+    }
+
+    // Apply gravity
+    if (!player.is_grounded)
+    {
+        player.vel.y += (player.acc.y * state->delta_t);
     }
     else
     {
-        player.acc.y = 0;
+        player.vel.y = 0;
     }
 
-    _DriftLog("%d, %d", player.acc.x, player.acc.y);
+    DriftLog("(%lf, %lf) : %lf - %lf", player.vel.x, player.vel.y,
+             (player.jump_speed * state->delta_t));
 
-    if (player.grounded && platform->keys[KEY_down].down)
+    if (player.is_grounded && platform->keys[KEY_down].down)
     {
         player.dimension.height = 32;
     }
@@ -63,9 +97,7 @@ UPDATE_APP
         player.dimension.height = 64;
     }
 
-    player.acc.x += player.vel.x * 0.1f;
-    player.vel = V2Scalar(V2Add(player.vel, player.acc), 2);
-    player.pos = V2Add(player.pos, V2Add(player.vel, V2Scalar(player.acc, 0.5)));
+    player.pos = V2Add(player.pos, player.vel);
 
     if (player.pos.x < 0)
     {
@@ -83,7 +115,7 @@ UPDATE_APP
     else if (player.pos.y + player.dimension.height > platform->window_height)
     {
         player.pos.y = platform->window_height - player.dimension.height;
-        player.grounded = 1;
+        player.is_grounded = 1;
     }
 
     // Render
