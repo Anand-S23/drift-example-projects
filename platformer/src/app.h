@@ -16,6 +16,12 @@ typedef struct entity
     b32 initialized;
 } entity;
 
+typedef struct rigid_body
+{
+    v2 pos;
+    v2 size;
+} rigid_body;
+
 typedef struct app_state
 {
     renderer renderer;
