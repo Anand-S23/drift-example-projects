@@ -96,28 +96,42 @@ UPDATE_APP
     // Collision detection
     if (player.pos.x < test_platform.pos.x + test_platform.size.width &&
         player.pos.x + player.dimension.width > test_platform.pos.x &&
-        player.pos.y < test_platform.pos.y + test_platform.size.height &&
-        player.pos.y + player.dimension.height > test_platform.pos.y)
+        player.pos.y <= test_platform.pos.y + test_platform.size.height &&
+        player.pos.y + player.dimension.height >= test_platform.pos.y)
     {
         if (player.vel.y > 0)
         {
             player.pos.y = test_platform.pos.y - player.dimension.height;
-            player.vel = v2(0, 0);
+            player.vel.y = 0;
             player.is_grounded = 1;
             player.is_jumping = 0;
+            player.is_colliding = 1;
         }
-        else if (player.vel.x > 0)
+
+        if (!player.is_colliding)
         {
-            player.pos.x = test_platform.pos.x - player.dimension.width - 1;
-            player.vel.x = 0;
-        }
-        else if (player.vel.x < 0)
-        {
-            player.pos.x = test_platform.pos.x + test_platform.size.width + 1;
-            player.vel.x = 0;
+            if (player.vel.x > 0)
+            {
+                player.pos.x =
+                    test_platform.pos.x - player.dimension.width;
+                player.vel.x = 0;
+            }
+            else if (player.vel.x < 0)
+            {
+                player.pos.x =
+                    test_platform.pos.x + test_platform.size.width;
+                player.vel.x = 0;
+            }
         }
     }
-        
+    else
+    {
+        if (player.is_colliding)
+        {
+            player.is_colliding = 0;
+            player.is_grounded = 0;
+        }
+    }
 
     DriftLog("(%lf, %lf) : %lf - %lf", player.vel.x, player.vel.y,
              (player.jump_speed * state->delta_t));
