@@ -1,12 +1,15 @@
 #ifndef APP_H
 #define APP_H
 
+// TODO: Add this to drift
+#define Abs((x)) ((x) > 0 ? (x) : -(x))
+
 typedef struct entity
 {
     v2 pos;
     v2 vel;
     v2 acc;
-    v2 dimension;
+    v2 size;
     f32 max_speed;
     f32 friction;
     f32 jump_speed;
@@ -17,19 +20,19 @@ typedef struct entity
     b32 initialized;
 } entity;
 
-typedef struct rigid_body
+typedef struct object
 {
     v2 pos;
     v2 size;
-} rigid_body;
-
-#define MAX_PLATFORMS 5
+    texture object_texture;
+    b32 initialized;
+} object;
 
 typedef struct app_state
 {
     renderer renderer;
-    f32 delta_t;
-    rigid_body platforms[MAX_PLATFORMS];
+    f32 dt;
+    f32 time;
 } app_state;
 
 #endif
