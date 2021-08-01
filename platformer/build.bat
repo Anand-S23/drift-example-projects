@@ -1,8 +1,9 @@
 @echo off
 
-set stb=..\..\..\stb
-set g=..\..\..\glad
-set gl=..\..\..\..\glext
+set gml=w:\game_dev_libs
+set stb=%gml%\stb
+set g=%gml%\glad
+set gl=%gml%\glext
 set src=..\..\Drift_Engine
 
 set compile_flags= -DDRIFT_SLOW=1 /nologo /FC /Zi /MD 
